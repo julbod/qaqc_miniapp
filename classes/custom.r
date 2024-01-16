@@ -1,15 +1,13 @@
 #### custom graphs ####
 
+# Define the variable at the top
+variables <- c("Snow_Depth", "SWE")
+
 output$header2 <- renderUI({
   req(input$custom_site)
   str1 <- paste0("<h2>", station_meta[[input$custom_site]][1], " (", station_meta[[input$custom_site]][2], " m)", "</h2>")
-  if(input$custom_site %in% list_stn_tipping_bucket_errs){
-    HTML(paste(str1, p('The tipping bucket is currently malfunctioning at this station please refer to total precipitation (precip pipe) instead.', style = "color:red")))
-  }
-  else{HTML(paste(str1))}
+  HTML(paste(str1))
 })
-
-
 
 # pull data from mysql db based on user station and year input
 custom_data_query <- reactive({
@@ -19,13 +17,13 @@ custom_data_query <- reactive({
   # Connect to the first database
   conn1 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn1))
-  query1 <- paste0("SELECT DateTime, WatYr, Snow_Depth FROM clean_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query1 <- paste0("SELECT DateTime, WatYr, ", paste(variables, collapse = ", "), " FROM clean_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
   data1 <- dbGetQuery(conn1, query1)
 
   # Connect to the second database
   conn2 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn2))
-  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
   data2 <- dbGetQuery(conn2, query2)
 
   # Create a new column "Database" to differentiate between the two databases
@@ -48,7 +46,11 @@ observe({
 
 # get available variables for selected station
 output$varSelection <- renderUI({
-  radioButtons(inputId = "custom_var", label = "Select one or two variables:", choices = c("Snow_Depth"), inline = FALSE, selected = "Snow_Depth")
+  radioButtons(inputId = "custom_var", 
+               label = "Select one or two variables:", 
+               choices = variables,
+               inline = FALSE,
+               selected = variables[1])  # Set a default selection, e.g., the first variable
 })
 
 
@@ -89,28 +91,36 @@ finalData <- reactive({
   return(df)
 })
 
-
 # plot for custom graphs page
 output$plot1 <- renderPlotly({
-  req(input$custom_site)
-  req(input$custom_year)
-  req(input$custom_var)
-  req(finalData())
+  req(input$custom_site, input$custom_year, input$custom_var, finalData())
 
   df <- finalData() %>%
-    select(DateTime, Snow_Depth)  # Only select relevant columns
+    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags)  # Include SWE_flags and Snow_Depth_flags in the selection
 
   # Add a new column "Database" to indicate the source
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
-  if ("Snow_Depth" %in% input$custom_var) {
-    plot_ly(data = df, x = ~DateTime, y = ~Snow_Depth, color = ~Database, type = "scatter", mode = "lines") %>%
-      layout(
-        #xaxis = list(title = "DateTime"),
-        #yaxis = list(title = "Snow Depth"),
-        showlegend = TRUE
-      )
-  }
+  plots <- lapply(input$custom_var, function(variable) {
+    # Check if the variable column exists in the dataframe before plotting
+    if (variable %in% colnames(df)) {
+      flags_column <- paste0(variable, "_flags")
+      p <- plot_ly(data = df, x = ~DateTime, y = df[[variable]], color = ~Database, type = "scatter", mode = "lines",
+                   text = ~paste(ifelse(variable %in% c("SWE", "Snow_Depth") & df$Database == "QAQC_sql", paste(flags_column, ":", df[[flags_column]]), round(df[[variable]], 1)))) %>%
+        layout(
+          showlegend = TRUE,
+          title = variable
+        )
+
+      p
+    } else {
+      print(paste("Warning: Variable", variable, "not found in the dataframe. Skipping..."))
+      print(str(df))  # Print the structure of the dataframe for debugging purposes
+      NULL  # Return NULL if the variable is not found
+    }
+  })
+
+  subplot(plots)
 })
 
 #### render partner logo ui ####
