@@ -102,13 +102,14 @@ output$plot1 <- renderPlotly({
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
   # Extract the Snow_Depth_flags values from QAQC_sql database
-  qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", "Snow_Depth_flags")]
+  qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", "SWE_flags", "Snow_Depth_flags")]
 
   # Merge the extracted flags with the original dataframe based on DateTime
   df <- left_join(df, qaqc_flags, by = "DateTime")
 
   # Use the merged flags for Clean_sql database
-  df$Snow_Depth_flags <- ifelse(df$Database == "Clean_sql", df$Snow_Depth_flags.y, df$Snow_Depth_flags.x)
+  df$SWE_flags <- ifelse(df$Database == "Clean_sql", df$SWE_flags.y, df$SWE_flags.x)
+  df$Snow_Depth_flags <- ifelse(df$Database == "Clean_sql", df$Snow_Depth_flags.y, df$Snow_Depth_flags.x) 
 
   # Create a function to format the hover text
   formatHoverText <- function(variable, flags_column, flags) {
@@ -117,9 +118,10 @@ output$plot1 <- renderPlotly({
     return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
   }
 
-  # Use a loop to iterate over the values and flags to create hover text
-  df$hover_text <- mapply(formatHoverText, input$custom_var, paste(input$custom_var, "_flags", sep = "_"), df$Snow_Depth_flags)
+  # Create hover text for each variables
+  df$hover_text <- mapply(formatHoverText, input$custom_var, paste(input$custom_var, "_flags", sep = "_"), df[[paste(input$custom_var, "flags", sep = "_")]])
 
+  # plot data
   plots <- lapply(input$custom_var, function(variable) {
     # Check if the variable column exists in the dataframe before plotting
     if (variable %in% colnames(df)) {
@@ -141,6 +143,7 @@ output$plot1 <- renderPlotly({
 
   subplot(plots)
 })
+
 
 #### render partner logo ui ####
 output$partnerLogoUI_custom <- renderUI({
