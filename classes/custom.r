@@ -101,12 +101,30 @@ output$plot1 <- renderPlotly({
   # Add a new column "Database" to indicate the source
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
+  # Extract the Snow_Depth_flags values from QAQC_sql database
+  qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", "Snow_Depth_flags")]
+
+  # Merge the extracted flags with the original dataframe based on DateTime
+  df <- left_join(df, qaqc_flags, by = "DateTime")
+
+  # Use the merged flags for Clean_sql database
+  df$Snow_Depth_flags <- ifelse(df$Database == "Clean_sql", df$Snow_Depth_flags.y, df$Snow_Depth_flags.x)
+
+  # Create a function to format the hover text
+  formatHoverText <- function(variable, flags_column, flags) {
+    prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else ""
+  
+    return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
+  }
+
+  # Use a loop to iterate over the values and flags to create hover text
+  df$hover_text <- mapply(formatHoverText, input$custom_var, paste(input$custom_var, "_flags", sep = "_"), df$Snow_Depth_flags)
+
   plots <- lapply(input$custom_var, function(variable) {
     # Check if the variable column exists in the dataframe before plotting
     if (variable %in% colnames(df)) {
-      flags_column <- paste0(variable, "_flags")
       p <- plot_ly(data = df, x = ~DateTime, y = df[[variable]], color = ~Database, type = "scatter", mode = "lines",
-                   text = ~paste(ifelse(variable %in% c("SWE", "Snow_Depth") & df$Database == "QAQC_sql", paste(flags_column, ":", df[[flags_column]]), round(df[[variable]], 1)))) %>%
+                   text = ~hover_text) %>%
         layout(
           showlegend = TRUE,
           title = variable
@@ -117,8 +135,9 @@ output$plot1 <- renderPlotly({
       print(paste("Warning: Variable", variable, "not found in the dataframe. Skipping..."))
       print(str(df))  # Print the structure of the dataframe for debugging purposes
       NULL  # Return NULL if the variable is not found
-    }
+    } 
   })
+
 
   subplot(plots)
 })
