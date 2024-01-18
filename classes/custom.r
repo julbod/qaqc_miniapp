@@ -1,7 +1,13 @@
 #### custom graphs ####
 
 # Define the variable at the top
-variables <- c("Snow_Depth", "SWE")
+variables <- c("Snow_Depth", "SWE", "Air_Temp")
+
+# Define formatHoverText function outside the renderPlotly block
+formatHoverText <- function(variable, flags_column, flags) {
+  prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else if (variable == "Air_Temp") "Air_Temp_flags: " else ""
+  return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
+}
 
 output$header2 <- renderUI({
   req(input$custom_site)
@@ -23,7 +29,7 @@ custom_data_query <- reactive({
   # Connect to the second database
   conn2 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn2))
-  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
   data2 <- dbGetQuery(conn2, query2)
 
   # Create a new column "Database" to differentiate between the two databases
@@ -31,6 +37,8 @@ custom_data_query <- reactive({
   data2$Database <- "QAQC_sql"
 
   # Combine data from both databases
+  data1 <- as.data.frame(lapply(data1, function(x) if(is.character(x)) as.numeric(as.character(x)) else x))
+  data2 <- as.data.frame(lapply(data2, function(x) if(is.character(x)) as.numeric(as.character(x)) else x))
   data <- bind_rows(data1, data2)
 })
 
@@ -81,56 +89,80 @@ customDataFilter <-  reactive({
 })
 
 # final data set
-
 finalData <- reactive({
   req(customDataFilter())
   req(input$custom_var)
 
   df <- customDataFilter()
 
+  # Convert all columns to numeric and replace NULL with NaN
+  df <- as.data.frame(lapply(df, function(x) {
+    if(is.character(x)) {
+      numeric_x <- as.numeric(x)
+      numeric_x[is.na(numeric_x)] <- NaN
+      return(numeric_x)
+    } else {
+      return(x)
+    }
+  }))
+
   return(df)
 })
+
+# plot for custom graphs page
+# ...
 
 # plot for custom graphs page
 output$plot1 <- renderPlotly({
   req(input$custom_site, input$custom_year, input$custom_var, finalData())
 
   df <- finalData() %>%
-    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags)  # Include SWE_flags and Snow_Depth_flags in the selection
+    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags, Air_Temp_flags)  # Include flags in the selection
+
+  # Check if all values in QAQC data are NULL or NaN for each variable
+  all_null_or_nan <- sapply(df[grep("_flags$", colnames(df))], function(x) all(is.na(x)))
 
   # Add a new column "Database" to indicate the source
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
-  # Extract the Snow_Depth_flags values from QAQC_sql database
-  qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", "SWE_flags", "Snow_Depth_flags")]
+  # ...
 
-  # Merge the extracted flags with the original dataframe based on DateTime
-  df <- left_join(df, qaqc_flags, by = "DateTime")
-
-  # Use the merged flags for Clean_sql database
-  df$SWE_flags <- ifelse(df$Database == "Clean_sql", df$SWE_flags.y, df$SWE_flags.x)
-  df$Snow_Depth_flags <- ifelse(df$Database == "Clean_sql", df$Snow_Depth_flags.y, df$Snow_Depth_flags.x) 
-
-  # Create a function to format the hover text
-  formatHoverText <- function(variable, flags_column, flags) {
-    prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else ""
-  
-    return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
-  }
-
-  # Create hover text for each variables
+  # Create hover text for each variable
   df$hover_text <- mapply(formatHoverText, input$custom_var, paste(input$custom_var, "_flags", sep = "_"), df[[paste(input$custom_var, "flags", sep = "_")]])
+
+  # Check if all values in QAQC data are NULL or NaN for each variable
+  all_null_or_nan <- sapply(df[grep("_flags$", colnames(df))], function(x) all(is.na(x)))
 
   # plot data
   plots <- lapply(input$custom_var, function(variable) {
     # Check if the variable column exists in the dataframe before plotting
     if (variable %in% colnames(df)) {
-      p <- plot_ly(data = df, x = ~DateTime, y = df[[variable]], color = ~Database, type = "scatter", mode = "lines",
-                   text = ~hover_text) %>%
-        layout(
-          showlegend = TRUE,
-          title = variable
-        )
+      # Check if all values in QAQC data are NULL or NaN for the current variable
+      if (all_null_or_nan[paste(variable, "flags", sep = "_")]) {
+        p <- plot_ly() %>%
+          layout(
+            showlegend = TRUE,
+            title = variable,
+            annotations = list(
+              list(
+                x = 0.5,
+                y = 0.5,
+                xref = "paper",
+                yref = "paper",
+                text = "No QAQC data exists at this station for this variable or water year",
+                showarrow = FALSE,
+                font = list(size = 16, color = "red")  # Set font color to red
+              )
+            )
+          )
+      } else {
+        p <- plot_ly(data = df, x = ~DateTime, y = df[[variable]], color = ~Database, type = "scatter", mode = "lines",
+                     text = ~hover_text) %>%
+          layout(
+            showlegend = TRUE,
+            title = variable
+          )
+      }
 
       p
     } else {
@@ -140,10 +172,8 @@ output$plot1 <- renderPlotly({
     } 
   })
 
-
   subplot(plots)
 })
-
 
 #### render partner logo ui ####
 output$partnerLogoUI_custom <- renderUI({
