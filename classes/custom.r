@@ -1,5 +1,3 @@
-#### custom graphs ####
-
 # Define the variable at the top
 variables <- c("Snow_Depth", "SWE", "Air_Temp")
 
@@ -110,9 +108,6 @@ finalData <- reactive({
 })
 
 # plot for custom graphs page
-# ...
-
-# plot for custom graphs page
 output$plot1 <- renderPlotly({
   req(input$custom_site, input$custom_year, input$custom_var, finalData())
 
@@ -125,7 +120,14 @@ output$plot1 <- renderPlotly({
   # Add a new column "Database" to indicate the source
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
-  # ...
+  # Extract the Snow_Depth_flags values from QAQC_sql database
+  qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", paste(input$custom_var, "flags", sep = "_"))]
+
+  # Merge the extracted flags with the original dataframe based on DateTime
+  df <- left_join(df, qaqc_flags, by = "DateTime")
+
+  # Use the merged flags for Clean_sql database
+  df[[paste(input$custom_var, "flags", sep = "_")]] <- ifelse(df$Database == "Clean_sql", df[[paste(input$custom_var, "flags.y", sep = "_")]], df[[paste(input$custom_var, "flags.x", sep = "_")]])
 
   # Create hover text for each variable
   df$hover_text <- mapply(formatHoverText, input$custom_var, paste(input$custom_var, "_flags", sep = "_"), df[[paste(input$custom_var, "flags", sep = "_")]])
