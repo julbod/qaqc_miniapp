@@ -35,8 +35,8 @@ custom_data_query <- reactive({
   data2$Database <- "QAQC_sql"
 
   # Combine data from both databases
-  data1 <- as.data.frame(lapply(data1, function(x) if(is.character(x)) as.numeric(as.character(x)) else x))
-  data2 <- as.data.frame(lapply(data2, function(x) if(is.character(x)) as.numeric(as.character(x)) else x))
+  data1 <- as.data.frame(lapply(data1, function(x) if(is.character(x)) x else x))
+  data2 <- as.data.frame(lapply(data2, function(x) if(is.character(x)) x else x))
   data <- bind_rows(data1, data2)
 })
 
@@ -45,7 +45,7 @@ observe({
   # need to find the year range of selected sites. finds the max of the two start years as the min.
   start_years <- station_meta[[input$custom_site]][3]
   min_year <- unname(unlist(lapply(start_years, max)))
-  max_year <- year(Sys.Date()) - ifelse(month(Sys.Date()) < 10, 1, 0) # up to previous water year
+  max_year <- year(Sys.Date()) - ifelse(month(Sys.Date()) < 10, 1, 0) # up to the previous water year
   year_range <- seq.int(min_year, max_year, by = 1)
   updateSelectInput(session, "custom_year", "Select Water Year:", year_range, selected = max_year)
 })
@@ -93,12 +93,13 @@ finalData <- reactive({
 
   df <- customDataFilter()
 
-  # Convert all columns to numeric and replace NULL with NaN
+  # Convert all columns to string, preserving non-numeric values with commas
   df <- as.data.frame(lapply(df, function(x) {
-    if(is.character(x)) {
-      numeric_x <- as.numeric(x)
-      numeric_x[is.na(numeric_x)] <- NaN
-      return(numeric_x)
+    if (is.character(x)) {
+      convert_to_string <- function(value) {
+        return(value)
+      }
+      return(convert_to_string(x))
     } else {
       return(x)
     }
