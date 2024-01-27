@@ -32,21 +32,36 @@ annual_data_query <- reactive({
   req(input$compare_var)
 
   withProgress(message = 'Requesting Data... ', value = 1, {
-      conn <- do.call(DBI::dbConnect, args)
-      on.exit(DBI::dbDisconnect(conn))
-      query <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM clean_", input$annual_site,";")
-      data <- dbGetQuery(conn, query) %>%
-        mutate(
-          plotTime = if_else(month(DateTime) < 10,
-                             weatherdash::set_yr(DateTime, 1901),
-                             weatherdash::set_yr(DateTime, 1900))) %>%
-          filter(WatYr > 0,
-                  WatYr %in% input$compare_year)
+    conn_qaqc <- do.call(DBI::dbConnect, args)
+    on.exit(DBI::dbDisconnect(conn_qaqc))
+    query_qaqc <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM qaqc_", input$annual_site,";")
+    data_qaqc <- dbGetQuery(conn_qaqc, query_qaqc) %>%
+      mutate(
+        plotTime = if_else(month(DateTime) < 10,
+                           weatherdash::set_yr(DateTime, 1901),
+                           weatherdash::set_yr(DateTime, 1900))) %>%
+      filter(WatYr > 0,
+             WatYr %in% input$compare_year)
+
+    conn_clean <- do.call(DBI::dbConnect, args)  # Assuming args_clean is the connection details for the "clean_" database
+    on.exit(DBI::dbDisconnect(conn_clean))
+    query_clean <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM clean_", input$annual_site, ";")
+    data_clean <- dbGetQuery(conn_clean, query_clean) %>%
+      mutate(
+        plotTime = if_else(month(DateTime) < 10,
+                           weatherdash::set_yr(DateTime, 1901),
+                           weatherdash::set_yr(DateTime, 1900))) %>%
+      filter(WatYr == 2024)  # Filter only the missing WatYr (2024)
+
+    # Combine data from qaqc and clean databases
+    combined_data <- bind_rows(data_qaqc, data_clean)
+
+    # Filter only relevant years
+    result_data <- combined_data %>%
+      filter(WatYr %in% input$compare_year)
   })
 
 })
-
-
 
 # plot all years
 output$plot2 <- renderPlotly({
@@ -55,36 +70,36 @@ output$plot2 <- renderPlotly({
   req(input$compare_var)
   req(input$compare_year)
 
-
   df <- annual_data_query()
 
   varNames <- names(Filter(function(x) unlist(x) %in% input$compare_var, varsDict))
 
-    plot_ly(df,
-            x = ~plotTime, # plot without year
-            y = ~df[,3],
-            text = ~DateTime, # bring in datetime with year for hover text
-            color = as.factor(df$WatYr),
-            colors = cbs_pal,
-            type = "scatter",
-            mode = "lines",
-            hovertemplate = paste('<b>%{text}</b><br>%{yaxis.title.text}: %{y}<extra></extra>')
+  plot_ly(df,
+          x = ~plotTime, # plot without year
+          y = ~df[,3],
+          text = ~DateTime, # bring in datetime with year for hover text
+          color = as.factor(df$WatYr),
+          colors = cbs_pal,
+          type = "scatter",
+          mode = "lines",
+          hovertemplate = paste('<b>%{text}</b><br>%{yaxis.title.text}: %{y}<extra></extra>')
 
-    ) %>%
+  ) %>%
 
-      layout(
-        xaxis = c(generalAxLayout,
-                  list(title = "",
-                       type = 'date',
-                       tickformat = "%b %d" # Mon Day
-                       )),
-        yaxis = c(generalAxLayout, list(title=paste0("<b>",varNames[1],"</b>"))),
-        margin = list(r = 50, l = 50),
-        plot_bgcolor = "#f5f5f5",
-        paper_bgcolor = "#f5f5f5",
-        hovermode = 'x'
-      )
+    layout(
+      xaxis = c(generalAxLayout,
+                list(title = "",
+                     type = 'date',
+                     tickformat = "%b %d" # Mon Day
+                )),
+      yaxis = c(generalAxLayout, list(title=paste0("<b>",varNames[1],"</b>"))),
+      margin = list(r = 50, l = 50),
+      plot_bgcolor = "#f5f5f5",
+      paper_bgcolor = "#f5f5f5",
+      hovermode = 'x'
+    )
 })
+
 
 #### render partner logo ui ####
 output$partnerLogoUI_annCompare <- renderUI({

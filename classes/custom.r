@@ -1,9 +1,9 @@
 # Define the variable at the top
-variables <- c("Snow_Depth", "SWE", "Air_Temp")
+variables <- c("Snow_Depth", "SWE", "Air_Temp", "PC_Raw_Pipe")
 
 # Define formatHoverText function outside the renderPlotly block
 formatHoverText <- function(variable, flags_column, flags) {
-  prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else if (variable == "Air_Temp") "Air_Temp_flags: " else ""
+  prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else if (variable == "Air_Temp") "Air_Temp_flags: " else if (variable == "PC_Raw_Pipe") "PC_Raw_Pipe_flags: " else ""
   return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
 }
 
@@ -27,7 +27,7 @@ custom_data_query <- reactive({
   # Connect to the second database
   conn2 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn2))
-  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags, PC_Raw_Pipe, PC_Raw_Pipe_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
   data2 <- dbGetQuery(conn2, query2)
 
   # Create a new column "Database" to differentiate between the two databases
@@ -37,7 +37,14 @@ custom_data_query <- reactive({
   # Combine data from both databases
   data1 <- as.data.frame(lapply(data1, function(x) if(is.character(x)) x else x))
   data2 <- as.data.frame(lapply(data2, function(x) if(is.character(x)) x else x))
-  data <- bind_rows(data1, data2)
+
+  # fix in case all values in qaqc are NULL
+  data2$SWE <- as.numeric(ifelse(is.na(data2$SWE), data2$SWE, data2$SWE))
+  data2$Snow_Depth <- as.numeric(ifelse(is.na(data2$Snow_Depth), data2$Snow_Depth, data2$Snow_Depth))
+  data2$Air_Temp <- as.numeric(ifelse(is.na(data2$Air_Temp), data2$Air_Temp, data2$Air_Temp))
+  data2$PC_Raw_Pipe <- as.numeric(ifelse(is.na(data2$PC_Raw_Pipe), data2$PC_Raw_Pipe, data2$PC_Raw_Pipe))
+
+data <- bind_rows(data1, data2)
 })
 
 # reactive element to create year list based on available years for chosen station
@@ -113,7 +120,7 @@ output$plot1 <- renderPlotly({
   req(input$custom_site, input$custom_year, input$custom_var, finalData())
 
   df <- finalData() %>%
-    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags, Air_Temp_flags)  # Include flags in the selection
+    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags, Air_Temp_flags, PC_Raw_Pipe_flags)
 
   # Check if all values in QAQC data are NULL or NaN for each variable
   all_null_or_nan <- sapply(df[grep("_flags$", colnames(df))], function(x) all(is.na(x)))
@@ -121,7 +128,7 @@ output$plot1 <- renderPlotly({
   # Add a new column "Database" to indicate the source
   df$Database <- rep(c("Clean_sql", "QAQC_sql"), each = nrow(df) / 2)
 
-  # Extract the Snow_Depth_flags values from QAQC_sql database
+  # Extract the flags values from QAQC_sql database
   qaqc_flags <- df[df$Database == "QAQC_sql", c("DateTime", paste(input$custom_var, "flags", sep = "_"))]
 
   # Merge the extracted flags with the original dataframe based on DateTime
