@@ -1,9 +1,9 @@
 # Define the variable at the top
-variables <- c("Snow_Depth", "SWE", "Air_Temp", "PC_Raw_Pipe", "RH")
+variables <- c("Snow_Depth", "SWE", "Air_Temp", "PC_Raw_Pipe", "RH", "BP")
 
 # Define formatHoverText function outside the renderPlotly block
 formatHoverText <- function(variable, flags_column, flags) {
-  prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else if (variable == "Air_Temp") "Air_Temp_flags: " else if (variable == "PC_Raw_Pipe") "PC_Raw_Pipe_flags: " else if (variable == "RH") "RH_flags: " else ""
+  prefix <- if (variable == "SWE") "SWE_flags: " else if (variable == "Snow_Depth") "Snow_Depth_flags: " else if (variable == "Air_Temp") "Air_Temp_flags: " else if (variable == "PC_Raw_Pipe") "PC_Raw_Pipe_flags: " else if (variable == "RH") "RH_flags: " else if (variable == "BP") "BP_flags: " else ""
   return(paste(prefix, ifelse(length(flags) > 0, paste(flags, collapse = ", "), "NA")))
 }
 
@@ -27,7 +27,7 @@ custom_data_query <- reactive({
   # Connect to the second database
   conn2 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn2))
-  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags, PC_Raw_Pipe, PC_Raw_Pipe_flags, RH, RH_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags, PC_Raw_Pipe, PC_Raw_Pipe_flags, RH, RH_flags, BP, BP_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
   data2 <- dbGetQuery(conn2, query2)
 
   # Create a new column "Database" to differentiate between the two databases
@@ -44,6 +44,7 @@ custom_data_query <- reactive({
   data2$Air_Temp <- as.numeric(ifelse(is.na(data2$Air_Temp), data2$Air_Temp, data2$Air_Temp))
   data2$PC_Raw_Pipe <- as.numeric(ifelse(is.na(data2$PC_Raw_Pipe), data2$PC_Raw_Pipe, data2$PC_Raw_Pipe))
   data2$RH <- as.numeric(ifelse(is.na(data2$RH), data2$RH, data2$RH))
+  data2$BP <- as.numeric(ifelse(is.na(data2$BP), data2$BP, data2$BP))
 
 data <- bind_rows(data1, data2)
 })
@@ -121,7 +122,7 @@ output$plot1 <- renderPlotly({
   req(input$custom_site, input$custom_year, input$custom_var, finalData())
 
   df <- finalData() %>%
-    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags, Air_Temp_flags, PC_Raw_Pipe_flags, RH_flags)
+    select(DateTime, !!!input$custom_var, SWE_flags, Snow_Depth_flags, Air_Temp_flags, PC_Raw_Pipe_flags, RH_flags, BP_flags)
 
   # Check if all values in QAQC data are NULL or NaN for each variable
   all_null_or_nan <- sapply(df[grep("_flags$", colnames(df))], function(x) all(is.na(x)))
@@ -144,7 +145,7 @@ output$plot1 <- renderPlotly({
   # Check if all values in QAQC data are NULL or NaN for each variable
   all_null_or_nan <- sapply(df[grep("_flags$", colnames(df))], function(x) all(is.na(x)))
 
-  # plot data
+# plot data
   plots <- lapply(input$custom_var, function(variable) {
     # Check if the variable column exists in the dataframe before plotting
     if (variable %in% colnames(df)) {
