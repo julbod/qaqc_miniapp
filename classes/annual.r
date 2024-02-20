@@ -32,32 +32,48 @@ annual_data_query <- reactive({
   req(input$compare_var)
 
   withProgress(message = 'Requesting Data... ', value = 1, {
-    conn_qaqc <- do.call(DBI::dbConnect, args)
-    on.exit(DBI::dbDisconnect(conn_qaqc))
-    query_qaqc <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM qaqc_", input$annual_site,";")
-    data_qaqc <- dbGetQuery(conn_qaqc, query_qaqc) %>%
-      mutate(
-        plotTime = if_else(month(DateTime) < 10,
-                           weatherdash::set_yr(DateTime, 1901),
-                           weatherdash::set_yr(DateTime, 1900))) %>%
-      filter(WatYr > 0,
-             WatYr %in% input$compare_year)
+    #if(grepl("cayley", input$annual_site, ignore.case = TRUE)) {
+      conn_qaqc <- do.call(DBI::dbConnect, args)
+      on.exit(DBI::dbDisconnect(conn_qaqc))
+      query_qaqc <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM qaqc_", input$annual_site,";")
+      data_qaqc <- dbGetQuery(conn_qaqc, query_qaqc) %>%
+        mutate(
+          plotTime = if_else(month(DateTime) < 10,
+                             weatherdash::set_yr(DateTime, 1901),
+                             weatherdash::set_yr(DateTime, 1900))) %>%
+        filter(WatYr > 0,
+               WatYr %in% input$compare_year)
+      
+      resulted_data <- data_qaqc
 
-    conn_clean <- do.call(DBI::dbConnect, args)  # Assuming args_clean is the connection details for the "clean_" database
-    on.exit(DBI::dbDisconnect(conn_clean))
-    query_clean <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM clean_", input$annual_site, ";")
-    data_clean <- dbGetQuery(conn_clean, query_clean) %>%
-      mutate(
-        plotTime = if_else(month(DateTime) < 10,
-                           weatherdash::set_yr(DateTime, 1901),
-                           weatherdash::set_yr(DateTime, 1900))) %>%
-      filter(WatYr == 2024)  # Filter only the missing WatYr (2024)
+    #} else {
+    #conn_qaqc <- do.call(DBI::dbConnect, args)
+    #on.exit(DBI::dbDisconnect(conn_qaqc))
+    #query_qaqc <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM qaqc_", input$annual_site,";")
+    #data_qaqc <- dbGetQuery(conn_qaqc, query_qaqc) %>%
+    #mutate(
+    #  plotTime = if_else(month(DateTime) < 10,
+    #                         weatherdash::set_yr(DateTime, 1901),
+    #                         weatherdash::set_yr(DateTime, 1900))) %>%
+    #  filter(WatYr > 0,
+    #       WatYr %in% input$compare_year)
+
+    #conn_clean <- do.call(DBI::dbConnect, args)  # Assuming args_clean is the connection details for the "clean_" database
+    #on.exit(DBI::dbDisconnect(conn_clean))
+    #query_clean <- paste0("SELECT DateTime, WatYr,", input$compare_var, " FROM clean_", input$annual_site, ";")
+    #data_clean <- dbGetQuery(conn_clean, query_clean) %>%
+    #  mutate(
+    #    plotTime = if_else(month(DateTime) < 10,
+    #                       weatherdash::set_yr(DateTime, 1901),
+    #                       weatherdash::set_yr(DateTime, 1900))) %>%
+    #  filter(WatYr == 2024)  # Filter only the missing WatYr (2024)
 
     # Combine data from qaqc and clean databases
-    combined_data <- bind_rows(data_qaqc, data_clean)
+    #resulted_data <- bind_rows(data_qaqc, data_clean)
+    #}
 
     # Filter only relevant years
-    result_data <- combined_data %>%
+    result_data <- resulted_data %>%
       filter(WatYr %in% input$compare_year)
   })
 

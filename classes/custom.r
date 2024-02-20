@@ -21,13 +21,13 @@ custom_data_query <- reactive({
   # Connect to the first database
   conn1 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn1))
-  query1 <- paste0("SELECT DateTime, WatYr, ", paste(variables, collapse = ", "), " FROM clean_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query1 <- paste0("SELECT DateTime, WatYr, ", paste(variables, collapse = ", "), " FROM clean_", input$custom_site, " WHERE WatYr = ", input$custom_year, " AND DateTime <= '2024-02-19 06:00:00';")
   data1 <- dbGetQuery(conn1, query1)
 
   # Connect to the second database
   conn2 <- do.call(DBI::dbConnect, args)
   on.exit(DBI::dbDisconnect(conn2))
-  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags, PC_Raw_Pipe, PC_Raw_Pipe_flags, RH, RH_flags, BP, BP_flags, PP_Tipper, PP_Tipper_flags, PC_Tipper, PC_Tipper_flags, Wind_Dir, Wind_Dir_flags, Pk_Wind_Dir, Pk_Wind_Dir_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, ";")
+  query2 <- paste0("SELECT DateTime, WatYr, Snow_Depth, Snow_Depth_flags, SWE, SWE_flags, Air_Temp, Air_Temp_flags, PC_Raw_Pipe, PC_Raw_Pipe_flags, RH, RH_flags, BP, BP_flags, PP_Tipper, PP_Tipper_flags, PC_Tipper, PC_Tipper_flags, Wind_Dir, Wind_Dir_flags, Pk_Wind_Dir, Pk_Wind_Dir_flags FROM qaqc_", input$custom_site, " WHERE WatYr = ", input$custom_year, " AND DateTime <= '2024-02-19 06:00:00';")
   data2 <- dbGetQuery(conn2, query2)
 
   # Create a new column "Database" to differentiate between the two databases
@@ -49,15 +49,18 @@ custom_data_query <- reactive({
   data2$PC_Tipper <- as.numeric(ifelse(is.na(data2$PC_Tipper), data2$PC_Tipper, data2$PC_Tipper))
   data2$Wind_Dir <- as.numeric(ifelse(is.na(data2$Wind_Dir), data2$Wind_Dir, data2$Wind_Dir))
   data2$Pk_Wind_Dir <- as.numeric(ifelse(is.na(data2$Pk_Wind_Dir), data2$Pk_Wind_Dir, data2$Pk_Wind_Dir))
-data <- bind_rows(data1, data2)
+
+  data <- bind_rows(data1, data2)
 })
+
 
 # reactive element to create year list based on available years for chosen station
 observe({
   # need to find the year range of selected sites. finds the max of the two start years as the min.
   start_years <- station_meta[[input$custom_site]][3]
   min_year <- unname(unlist(lapply(start_years, max)))
-  max_year <- year(Sys.Date()) - ifelse(month(Sys.Date()) < 10, 1, 0) # up to the previous water year
+  #max_year <- year(Sys.Date()) - ifelse(month(Sys.Date()) < 10, 1, 0) # up to the previous water year
+  max_year <- year(Sys.Date()) # include current water year
   year_range <- seq.int(min_year, max_year, by = 1)
   updateSelectInput(session, "custom_year", "Select Water Year:", year_range, selected = max_year)
 })

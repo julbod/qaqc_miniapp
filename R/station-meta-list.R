@@ -190,12 +190,28 @@ station_meta = list(
                                         logoPics$canada_logo,
                                         logoPics$mosaic_logo)),
 
+
   mountcayley = list(name = "Mount Cayley",
                      elevation = 1588,
                      startYear = 2015,
                      lat = 50.070919,
                      lon = -123.277469,
-                     params = c("Air_Temp", "RH", "BP", "Wind_Speed", "Wind_Dir", "Pk_Wind_Speed", "Pk_Wind_Dir", "PC_Tipper", "PP_Tipper", "Snow_Depth", "Solar_Rad", "Soil_Moisture","Soil_Temperature", "Batt"),
+                     params = c(
+                       "Air_Temp",
+                       "RH",
+                       "BP",
+                       "Wind_Speed",
+                       "Wind_Dir",
+                       "Pk_Wind_Speed",
+                       "Pk_Wind_Dir",
+                       "PC_Tipper",
+                       "PP_Tipper",
+                       "Snow_Depth",
+                       "Solar_Rad",
+                       "Soil_Moisture",
+                       "Soil_Temperature",
+                       "Batt"
+                     ),
                      logos = column(12, align = "center", style='padding:0px;',
 
                                     logoPics$bcgov_logo,
